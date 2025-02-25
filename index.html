@@ -1,1 +1,745 @@
-xx
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Pizarra Virtual Modo Oscuro - Zoom, Pegar y Resize 8 Handles</title>
+  <style>
+    /* Tema oscuro y estilos generales */
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: #e0e0e0;
+      overflow: hidden;
+    }
+    /* Toolbar */
+    #toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: #1e1e1e;
+    }
+    .tool-group {
+      position: relative;
+      display: inline-block;
+    }
+    .tool-group > button {
+      background-color: #007bff;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: background 0.3s;
+      color: #fff;
+      font-size: 14px;
+    }
+    .tool-group-content {
+      display: none;
+      position: absolute;
+      background-color: #2a2a2a;
+      min-width: 160px;
+      box-shadow: 0px 8px 16px rgba(0,0,0,0.5);
+      z-index: 1;
+      border-radius: 4px;
+      padding: 8px;
+    }
+    .tool-group:hover .tool-group-content {
+      display: block;
+    }
+    .tool-group-content button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      margin: 4px 0;
+      padding: 8px;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.3s;
+      font-size: 14px;
+    }
+    /* Botones y select fuera de grupos */
+    #toolbar button, #toolbar select, #toolbar input[type="color"] {
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      background-color: #007bff;
+      color: #fff;
+      transition: background 0.3s;
+    }
+    #toolbar button.active,
+    #toolbar button:hover {
+      background-color: #0056b3;
+    }
+    .color-picker {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      padding: 8px;
+    }
+    .color-option {
+      width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .color-option:hover {
+      transform: scale(1.1);
+    }
+    .text-controls {
+      padding: 8px;
+    }
+    .text-controls select,
+    .text-controls input {
+      width: 100%;
+      margin: 4px 0;
+      padding: 4px;
+      background-color: #333;
+      color: #fff;
+      border: 1px solid #555;
+      border-radius: 4px;
+    }
+    #colorPicker {
+      width: 50px;
+      height: 30px;
+      padding: 0;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    /* Contenedor del canvas: scroll y mayor tamaño */
+    #canvasContainer {
+      width: 100%;
+      height: calc(100vh - 70px);
+      overflow: auto;
+      background: #121212;
+    }
+    /* Canvas */
+    canvas {
+      border: 1px solid #444;
+      background: #1e1e1e;
+      display: block;
+      margin: 20px auto;
+      cursor: crosshair;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <!-- Grupo de Herramientas de Dibujo -->
+    <div class="tool-group">
+      <button id="btnDrawingTools">Herramientas de Dibujo ▼</button>
+      <div class="tool-group-content">
+        <button id="btnDraw" onclick="setMode('draw')">Lápiz</button>
+        <button id="btnText" onclick="setMode('text')">Texto</button>
+        <button id="btnSelect" onclick="setMode('select')">Seleccionar/Editar</button>
+      </div>
+    </div>
+    <!-- Grupo de Colores -->
+    <div class="tool-group">
+      <button id="btnColorTools">Colores ▼</button>
+      <div class="tool-group-content">
+        <div class="color-picker">
+          <div class="color-option" style="background: #000000" onclick="setColor('#000000')"></div>
+          <div class="color-option" style="background: #ff0000" onclick="setColor('#ff0000')"></div>
+          <div class="color-option" style="background: #00ff00" onclick="setColor('#00ff00')"></div>
+          <div class="color-option" style="background: #0000ff" onclick="setColor('#0000ff')"></div>
+          <div class="color-option" style="background: #ffff00" onclick="setColor('#ffff00')"></div>
+          <div class="color-option" style="background: #ff00ff" onclick="setColor('#ff00ff')"></div>
+          <div class="color-option" style="background: #00ffff" onclick="setColor('#00ffff')"></div>
+          <div class="color-option" style="background: #ffffff" onclick="setColor('#ffffff')"></div>
+        </div>
+        <input type="color" id="colorPicker" onchange="setColor(this.value)" value="#000000">
+      </div>
+    </div>
+    <!-- Grupo de Opciones de Texto -->
+    <div class="tool-group" id="textToolsGroup" style="display: none;">
+      <button id="btnTextTools">Opciones de Texto ▼</button>
+      <div class="tool-group-content">
+        <div class="text-controls">
+          <select id="fontFamily" onchange="updateTextStyle()">
+            <option value="Arial">Arial</option>
+            <option value="Times New Roman">Times New Roman</option>
+            <option value="Courier New">Courier New</option>
+            <option value="Georgia">Georgia</option>
+          </select>
+          <select id="fontSize" onchange="updateTextStyle()">
+            <option value="12">12px</option>
+            <option value="16" selected>16px</option>
+            <option value="20">20px</option>
+            <option value="24">24px</option>
+            <option value="32">32px</option>
+          </select>
+          <button onclick="toggleBold()">Negrita</button>
+          <button onclick="toggleItalic()">Cursiva</button>
+        </div>
+      </div>
+    </div>
+    <!-- Grupo de Archivo -->
+    <div class="tool-group">
+      <button id="btnFileTools">Archivo ▼</button>
+      <div class="tool-group-content">
+        <button onclick="clearCanvas()">Limpiar Todo</button>
+        <button onclick="saveCanvas()">Guardar</button>
+        <button onclick="loadCanvas()">Cargar</button>
+      </div>
+    </div>
+    <!-- Zoom Controls -->
+    <button onclick="zoomIn()">Zoom +</button>
+    <button onclick="zoomOut()">Zoom -</button>
+    <button onclick="resetZoom()">Reset Zoom</button>
+    <button onclick="deleteSelected()">Eliminar Selección</button>
+  </div>
+  
+  <!-- Contenedor del canvas con scroll -->
+  <div id="canvasContainer">
+    <canvas id="pizarra" width="1600" height="1200"></canvas>
+  </div>
+  
+  <script>
+    // --- Configuración inicial ---
+    const canvas = document.getElementById('pizarra');
+    const ctx = canvas.getContext('2d');
+    
+    // Variables de estado
+    let mode = 'draw'; // 'draw', 'text', 'select'
+    let objects = []; // Cada objeto: { type: 'path', 'text' o 'image', ... }
+    let currentPath = [];
+    let selectedObject = null;
+    let isDragging = false;
+    let dragStart = null;
+    let resizeHandle = null;
+    let initialBBox = null;
+    let originalPath = null;
+    let originalFontSize = null;
+    let currentColor = '#000000';
+    
+    // Opciones de texto
+    let currentText = {
+      font: '16px Arial',
+      isBold: false,
+      isItalic: false
+    };
+    
+    const HANDLE_SIZE = 8;
+    let zoomLevel = 1; // Factor de zoom global
+    let lastMousePos = { x: 0, y: 0 };
+    
+    // --- Funciones de Zoom ---
+    function zoomIn() {
+      zoomLevel *= 1.1;
+      drawAll();
+    }
+    function zoomOut() {
+      zoomLevel /= 1.1;
+      drawAll();
+    }
+    function resetZoom() {
+      zoomLevel = 1;
+      drawAll();
+    }
+    
+    // --- Funciones de Color ---
+    function setColor(color) {
+      currentColor = color;
+      document.getElementById('colorPicker').value = color;
+    }
+    
+    // --- Funciones de Texto ---
+    function updateTextStyle() {
+      const fontFamily = document.getElementById('fontFamily').value;
+      const fontSize = document.getElementById('fontSize').value;
+      const bold = currentText.isBold ? 'bold' : '';
+      const italic = currentText.isItalic ? 'italic' : '';
+      currentText.font = `${bold} ${italic} ${fontSize}px ${fontFamily}`.trim();
+      if (selectedObject && selectedObject.type === 'text') {
+        selectedObject.font = currentText.font;
+        // Si se había aplicado un rewrap, volver a rewrap con el nuevo font
+        if (selectedObject.wrappedLines) {
+          selectedObject.wrappedLines = wrapText(selectedObject.text, selectedObject.wrapWidth, selectedObject.font);
+        }
+        drawAll();
+      }
+    }
+    function toggleBold() {
+      currentText.isBold = !currentText.isBold;
+      updateTextStyle();
+    }
+    function toggleItalic() {
+      currentText.isItalic = !currentText.isItalic;
+      updateTextStyle();
+    }
+    
+    // --- Función para rewrap de texto ---
+    function wrapText(text, maxWidth, font) {
+      ctx.font = font;
+      const words = text.split(' ');
+      const lines = [];
+      let currentLine = '';
+      for (let word of words) {
+        const testLine = currentLine ? currentLine + ' ' + word : word;
+        if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+      return lines;
+    }
+    
+    // --- Funciones Utilitarias ---
+    // getMousePos ajusta las coordenadas según el zoom y actualiza lastMousePos
+    function getMousePos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const pos = { 
+        x: (evt.clientX - rect.left) / zoomLevel, 
+        y: (evt.clientY - rect.top) / zoomLevel 
+      };
+      lastMousePos = pos;
+      return pos;
+    }
+    
+    function getBoundingBox(obj) {
+      if (obj.type === 'text') {
+        ctx.font = obj.font;
+        if (obj.wrappedLines) {
+          const lineHeight = parseInt(obj.font) * 1.2;
+          let maxWidth = 0;
+          obj.wrappedLines.forEach(line => {
+            const w = ctx.measureText(line).width;
+            if (w > maxWidth) maxWidth = w;
+          });
+          return {
+            x: obj.x,
+            y: obj.y - parseInt(obj.font),
+            width: maxWidth,
+            height: obj.wrappedLines.length * lineHeight
+          };
+        } else {
+          const metrics = ctx.measureText(obj.text);
+          return {
+            x: obj.x,
+            y: obj.y - metrics.actualBoundingBoxAscent,
+            width: metrics.width,
+            height: metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent
+          };
+        }
+      } else if(obj.type === 'image'){
+        return {
+          x: obj.x,
+          y: obj.y,
+          width: obj.width,
+          height: obj.height
+        };
+      } else {
+        const xs = obj.path.map(p => p.x);
+        const ys = obj.path.map(p => p.y);
+        return {
+          x: Math.min(...xs),
+          y: Math.min(...ys),
+          width: Math.max(...xs) - Math.min(...xs),
+          height: Math.max(...ys) - Math.min(...ys)
+        };
+      }
+    }
+    
+    // Dibuja 8 handles (4 esquinas y 4 medios)
+    function drawHandles(bbox) {
+      const handles = [
+        { x: bbox.x, y: bbox.y },
+        { x: bbox.x + bbox.width/2, y: bbox.y },
+        { x: bbox.x + bbox.width, y: bbox.y },
+        { x: bbox.x + bbox.width, y: bbox.y + bbox.height/2 },
+        { x: bbox.x + bbox.width, y: bbox.y + bbox.height },
+        { x: bbox.x + bbox.width/2, y: bbox.y + bbox.height },
+        { x: bbox.x, y: bbox.y + bbox.height },
+        { x: bbox.x, y: bbox.y + bbox.height/2 }
+      ];
+      ctx.fillStyle = 'red';
+      handles.forEach(h => {
+        ctx.fillRect(h.x - HANDLE_SIZE/2, h.y - HANDLE_SIZE/2, HANDLE_SIZE, HANDLE_SIZE);
+      });
+    }
+    
+    // getHandleUnderMouse: revisar los 8 handles
+    function getHandleUnderMouse(pos, bbox) {
+      const handles = [
+        { x: bbox.x, y: bbox.y },
+        { x: bbox.x + bbox.width/2, y: bbox.y },
+        { x: bbox.x + bbox.width, y: bbox.y },
+        { x: bbox.x + bbox.width, y: bbox.y + bbox.height/2 },
+        { x: bbox.x + bbox.width, y: bbox.y + bbox.height },
+        { x: bbox.x + bbox.width/2, y: bbox.y + bbox.height },
+        { x: bbox.x, y: bbox.y + bbox.height },
+        { x: bbox.x, y: bbox.y + bbox.height/2 }
+      ];
+      for (let i = 0; i < handles.length; i++) {
+        if (Math.abs(pos.x - handles[i].x) <= HANDLE_SIZE &&
+            Math.abs(pos.y - handles[i].y) <= HANDLE_SIZE) {
+          return i;
+        }
+      }
+      return null;
+    }
+    
+    function drawPath(obj) {
+      if (obj.path.length < 2) return;
+      ctx.beginPath();
+      ctx.strokeStyle = obj.color || '#000000';
+      ctx.moveTo(obj.path[0].x, obj.path[0].y);
+      for (let i = 1; i < obj.path.length; i++) {
+        ctx.lineTo(obj.path[i].x, obj.path[i].y);
+      }
+      ctx.stroke();
+    }
+    
+    function drawText(obj) {
+      ctx.font = obj.font;
+      ctx.fillStyle = obj.color;
+      if (obj.wrappedLines) {
+        const lineHeight = parseInt(obj.font) * 1.2;
+        obj.wrappedLines.forEach((line, i) => {
+          ctx.fillText(line, obj.x, obj.y + i * lineHeight);
+        });
+      } else {
+        ctx.fillText(obj.text, obj.x, obj.y);
+      }
+    }
+    
+    function drawImageObj(obj) {
+      if (obj.image && obj.image.complete) {
+        ctx.drawImage(obj.image, obj.x, obj.y, obj.width, obj.height);
+      }
+    }
+    
+    function isInside(pos, bbox) {
+      return pos.x >= bbox.x && pos.x <= bbox.x + bbox.width &&
+             pos.y >= bbox.y && pos.y <= bbox.y + bbox.height;
+    }
+    
+    // --- Gestión de Modos y Toolbar ---
+    function setMode(newMode) {
+      mode = newMode;
+      selectedObject = null;
+      document.getElementById('textToolsGroup').style.display =
+        (mode === 'text') ? 'inline-block' : 'none';
+      updateToolbar();
+      drawAll();
+    }
+    
+    function updateToolbar() {
+      document.getElementById('btnDraw').classList.toggle('active', mode === 'draw');
+      document.getElementById('btnText').classList.toggle('active', mode === 'text');
+      document.getElementById('btnSelect').classList.toggle('active', mode === 'select');
+    }
+    
+    // --- Eventos del Canvas ---
+    canvas.addEventListener('mousedown', evt => {
+      const pos = getMousePos(evt);
+      if (mode === 'draw') {
+        currentPath = [{ x: pos.x, y: pos.y }];
+        isDragging = true;
+      } else if (mode === 'text') {
+        let txt = prompt("Ingrese el texto:");
+        if (txt) {
+          const textObj = {
+            type: 'text',
+            text: txt,
+            x: pos.x,
+            y: pos.y,
+            font: currentText.font,
+            color: currentColor
+          };
+          objects.push(textObj);
+          saveCanvas();
+          drawAll();
+        }
+        setMode('select');
+      } else if (mode === 'select') {
+        selectedObject = null;
+        for (let i = objects.length - 1; i >= 0; i--) {
+          const bbox = getBoundingBox(objects[i]);
+          if (isInside(pos, bbox)) {
+            selectedObject = objects[i];
+            const handle = getHandleUnderMouse(pos, bbox);
+            if (handle !== null) {
+              resizeHandle = handle;
+              initialBBox = bbox;
+              if (selectedObject.type === 'text') {
+                originalFontSize = parseInt(document.getElementById('fontSize').value);
+                // Al iniciar el resize lateral, definimos el wrapWidth
+                if (handle === 3 || handle === 7) {
+                  selectedObject.wrapWidth = Math.abs(bbox.x + bbox.width - pos.x);
+                }
+              } else if (selectedObject.type === 'path') {
+                originalPath = JSON.parse(JSON.stringify(selectedObject.path));
+              }
+            }
+            break;
+          }
+        }
+        isDragging = true;
+        dragStart = pos;
+      }
+      drawAll();
+    });
+    
+    canvas.addEventListener('mousemove', evt => {
+      const pos = getMousePos(evt);
+      if (!isDragging) return;
+      if (mode === 'draw') {
+        currentPath.push({ x: pos.x, y: pos.y });
+      } else if (mode === 'select' && selectedObject) {
+        if (resizeHandle !== null) {
+          let bbox = initialBBox;
+          let fixedPoint, scaleX = 1, scaleY = 1;
+          // Definir fixedPoint según el handle (8 handles)
+          switch (resizeHandle) {
+            case 0: fixedPoint = { x: bbox.x + bbox.width, y: bbox.y + bbox.height }; break;
+            case 1: fixedPoint = { x: bbox.x + bbox.width/2, y: bbox.y + bbox.height }; break;
+            case 2: fixedPoint = { x: bbox.x, y: bbox.y + bbox.height }; break;
+            case 3: fixedPoint = { x: bbox.x, y: bbox.y + bbox.height/2 }; break;
+            case 4: fixedPoint = { x: bbox.x, y: bbox.y }; break;
+            case 5: fixedPoint = { x: bbox.x + bbox.width/2, y: bbox.y }; break;
+            case 6: fixedPoint = { x: bbox.x + bbox.width, y: bbox.y }; break;
+            case 7: fixedPoint = { x: bbox.x + bbox.width, y: bbox.y + bbox.height/2 }; break;
+          }
+          let newWidth = Math.abs(pos.x - fixedPoint.x);
+          let newHeight = Math.abs(pos.y - fixedPoint.y);
+          newWidth = Math.max(newWidth, 10);
+          newHeight = Math.max(newHeight, 10);
+          
+          if (selectedObject.type === 'text') {
+            // Si se usan los handles centrales laterales (índices 3 y 7) se reenvuelve el texto
+            if (resizeHandle === 3 || resizeHandle === 7) {
+              const newWrapWidth = newWidth; // nuevo ancho de envoltura
+              selectedObject.wrapWidth = newWrapWidth;
+              // Recalcular líneas del texto (se mantiene el font sin cambios)
+              selectedObject.wrappedLines = wrapText(selectedObject.text, newWrapWidth, selectedObject.font);
+            } else {
+              // Para otros handles, se escala el tamaño de la fuente proporcionalmente y se borra el rewrap
+              const scaleXUniform = newWidth / bbox.width;
+              const scaleYUniform = newHeight / bbox.height;
+              const scale = Math.min(scaleXUniform, scaleYUniform);
+              selectedObject.fontSize = originalFontSize * scale;
+              delete selectedObject.wrappedLines;
+              const fontFamily = document.getElementById('fontFamily').value;
+              const bold = currentText.isBold ? 'bold' : '';
+              const italic = currentText.isItalic ? 'italic' : '';
+              selectedObject.font = `${bold} ${italic} ${selectedObject.fontSize}px ${fontFamily}`.trim();
+            }
+          } else if (selectedObject.type === 'path') {
+            if (resizeHandle % 2 === 0) {
+              scaleX = newWidth / bbox.width;
+              scaleY = newHeight / bbox.height;
+              selectedObject.path = originalPath.map(pt => ({
+                x: fixedPoint.x + (pt.x - fixedPoint.x) * scaleX,
+                y: fixedPoint.y + (pt.y - fixedPoint.y) * scaleY
+              }));
+            } else {
+              if (resizeHandle === 1 || resizeHandle === 5) {
+                const scale = newHeight / bbox.height;
+                selectedObject.path = originalPath.map(pt => ({
+                  x: pt.x,
+                  y: fixedPoint.y + (pt.y - fixedPoint.y) * scale
+                }));
+              } else {
+                const scale = newWidth / bbox.width;
+                selectedObject.path = originalPath.map(pt => ({
+                  x: fixedPoint.x + (pt.x - fixedPoint.x) * scale,
+                  y: pt.y
+                }));
+              }
+            }
+          } else if (selectedObject.type === 'image') {
+            if (resizeHandle % 2 === 0) {
+              scaleX = newWidth / bbox.width;
+              scaleY = newHeight / bbox.height;
+              selectedObject.width = selectedObject.image.width * scaleX;
+              selectedObject.height = selectedObject.image.height * scaleY;
+            } else {
+              if (resizeHandle === 1 || resizeHandle === 5) {
+                const scale = newHeight / bbox.height;
+                selectedObject.height = selectedObject.image.height * scale;
+              } else {
+                const scale = newWidth / bbox.width;
+                selectedObject.width = selectedObject.image.width * scale;
+              }
+            }
+          }
+        } else {
+          const dx = pos.x - dragStart.x;
+          const dy = pos.y - dragStart.y;
+          if (selectedObject.type === 'text' || selectedObject.type === 'image') {
+            selectedObject.x += dx;
+            selectedObject.y += dy;
+          } else {
+            selectedObject.path = selectedObject.path.map(pt => ({
+              x: pt.x + dx,
+              y: pt.y + dy
+            }));
+          }
+          dragStart = pos;
+        }
+      }
+      drawAll();
+    });
+    
+    canvas.addEventListener('mouseup', () => {
+      if (mode === 'draw' && isDragging) {
+        if (currentPath.length > 1) {
+          objects.push({ type: 'path', path: currentPath, color: currentColor });
+          saveCanvas();
+        }
+        currentPath = [];
+      }
+      isDragging = false;
+      dragStart = null;
+      resizeHandle = null;
+      initialBBox = null;
+      originalPath = null;
+      originalFontSize = null;
+      saveCanvas();
+      drawAll();
+    });
+    
+    document.addEventListener('keydown', evt => {
+      if (mode === 'select' && selectedObject && (evt.key === 'Delete' || evt.key === 'Backspace')) {
+        deleteSelected();
+      }
+    });
+    
+    // Funcionalidad para pegar (Ctrl+V)
+    document.addEventListener('paste', (e) => {
+      const items = e.clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+        let item = items[i];
+        if (item.kind === 'string') {
+          item.getAsString(function(text) {
+            let textObj = {
+              type: 'text',
+              text: text,
+              x: lastMousePos.x,
+              y: lastMousePos.y,
+              font: currentText.font,
+              color: currentColor
+            };
+            objects.push(textObj);
+            saveCanvas();
+            drawAll();
+          });
+          e.preventDefault();
+          return;
+        } else if (item.type.indexOf("image") !== -1) {
+          let blob = item.getAsFile();
+          let reader = new FileReader();
+          reader.onload = function(event) {
+            let dataURL = event.target.result;
+            let img = new Image();
+            img.onload = function() {
+              let imageObj = {
+                type: 'image',
+                dataURL: dataURL,
+                image: img,
+                x: lastMousePos.x - img.width/2,
+                y: lastMousePos.y - img.height/2,
+                width: img.width,
+                height: img.height
+              };
+              objects.push(imageObj);
+              saveCanvas();
+              drawAll();
+            };
+            img.src = dataURL;
+          };
+          reader.readAsDataURL(blob);
+          e.preventDefault();
+          return;
+        }
+      }
+    });
+    
+    // --- Funciones de Control ---
+    function deleteSelected() {
+      if (selectedObject) {
+        objects = objects.filter(obj => obj !== selectedObject);
+        selectedObject = null;
+        saveCanvas();
+        drawAll();
+      } else {
+        alert("No hay objeto seleccionado para eliminar.");
+      }
+    }
+    function clearCanvas() {
+      objects = [];
+      currentPath = [];
+      selectedObject = null;
+      localStorage.removeItem('pizarraObjects');
+      drawAll();
+    }
+    function saveCanvas() {
+      localStorage.setItem('pizarraObjects', JSON.stringify(objects));
+    }
+    function loadCanvas() {
+      const data = localStorage.getItem('pizarraObjects');
+      if (data) {
+        objects = JSON.parse(data);
+        // Para imágenes, recrear la imagen a partir del dataURL
+        objects.forEach(obj => {
+          if(obj.type === 'image' && obj.dataURL) {
+            let img = new Image();
+            img.src = obj.dataURL;
+            obj.image = img;
+          }
+        });
+        selectedObject = null;
+        drawAll();
+      }
+    }
+    
+    function drawAll() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.scale(zoomLevel, zoomLevel);
+      objects.forEach(obj => {
+        if (obj.type === 'text') {
+          drawText(obj);
+        } else if (obj.type === 'path') {
+          drawPath(obj);
+        } else if (obj.type === 'image') {
+          drawImageObj(obj);
+        }
+        if (obj === selectedObject) {
+          const bbox = getBoundingBox(obj);
+          ctx.strokeStyle = 'blue';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(bbox.x, bbox.y, bbox.width, bbox.height);
+          drawHandles(bbox);
+        }
+      });
+      if (currentPath.length > 0 && mode === 'draw') {
+        drawPath({ path: currentPath, color: currentColor });
+      }
+      ctx.restore();
+    }
+    
+    window.onload = () => {
+      loadCanvas();
+      updateToolbar();
+    };
+  </script>
+</body>
+</html>
